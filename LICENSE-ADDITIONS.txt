@@ -1,0 +1,32 @@
+Original additions and modifications: rights reserved
+
+Copyright (c) 2026 Atticus Codex Maintainer
+
+To the extent that copyright or other exclusive rights subsist in the
+maintainer's original contributions, all rights are reserved unless the
+maintainer grants permission in writing or applicable law permits the use.
+
+This notice covers the original Codex provider adapter in codex_provider.py,
+its original tests in tests/test_codex_provider.py, and original modifications
+and documentation introduced by this edition. It does not claim rights in
+pre-existing code, interfaces, artwork, dependencies, names or other material
+owned by third parties. Those materials retain their existing licences.
+
+The MIT permissions in LICENSE and THIRD-PARTY-NOTICES.md continue to apply
+to their respective upstream material. This notice does not revoke, narrow
+or replace any permission already granted by an upstream rights holder.
+
+Publication permits viewing and any use required by the hosting platform's
+applicable terms. It is not a general licence to redistribute, sell or
+sublicense the maintainer's original protected contributions. For additional
+permissions, contact the repository maintainer through GitHub.
+
+This is a statement of licensing intent, not a copyright registration,
+legal determination of authorship, assignment of third-party rights,
+registered trademark, or guarantee of enforceability. No exclusive rights
+are asserted over material that is not eligible for protection.
+
+THE ORIGINAL ADDITIONS ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR
+PURPOSE AND NON-INFRINGEMENT. TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE
+LAW, THE MAINTAINER IS NOT LIABLE FOR CLAIMS OR DAMAGES ARISING FROM THEIR USE.
