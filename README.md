@@ -19,6 +19,8 @@ Installed app: `%LOCALAPPDATA%\Programs\Atticus`. Python and the speech model: `
 
 Set `provider` to `codex` in settings. The desktop defaults to Codex; the Python engine retains the upstream Claude adapter for regression compatibility. `codexEffort` is `low`, `medium` or `high`. `codexModel`, if set, explicitly overrides model selection; otherwise the adapter selects the default advertised by `model/list`, avoiding an incompatible global model setting. `ATTICUS_CODEX` can override native CLI discovery.
 
+Codex prepares its connection and tool context while you speak or type. Preparation does not start an AI turn or execute tools. A compact provider-specific prompt avoids unused shell instructions; typed questions capture screens only when they refer to screen content. Remote model load and network latency can still affect response time.
+
 ## Tools, privacy and approvals
 
 `codex_provider.py` supplies one structured dynamic tool, `atticus_action`. It runs an allowlist of Atticus helpers with argument arrays and no command shell. Built-in shell tools, inherited desktop plugins and MCP servers are excluded. Codex itself has a read-only sandbox; approved helpers run as the current user outside that sandbox. This is an approval boundary, not full desktop isolation.

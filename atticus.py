@@ -1407,9 +1407,13 @@ def run(task, p=None, shots=()):
     return reply or 'No answer came back. Please try again.', cost, steps
 
 
+def needs_screen(task):
+    return pref('screen', 'auto') != 'never' and bool(re.search(r"\b(screens?|monitors?|displays?|this|these|that|here|it|reading|looking|see|says?|shown?|page|tab|window|error|question|problem|where|how do i|button|click)\b", task.lower()))
+
+
 def screen_for(task, snap, fx=None):   # snap.shots: what look() returned; fx: x of the front window
     """The key-down screenshot, if the request points at the screen ("what does this say", "articles on what I'm reading")."""
-    if pref('screen', 'auto') == 'never' or not re.search(r"\b(screen|this|these|that|here|it|reading|looking|see|says?|shown?|page|tab|window|error|question|problem|where|how do i|button|click)\b", task.lower()):
+    if not needs_screen(task):
         return None
     snap.join(5)
     if fx is None or re.search(r"\b(monitor|laptop|other|second|both|all|external|built.in|screens)\b", task.lower()):
@@ -1763,13 +1767,17 @@ def main():
     snap = threading.Thread(target=lambda: shots.extend(look()), daemon=True)   # the screen as the user pressed the keys; sent only if the words are about it
     snap.shots = shots
     atexit.register(lambda: [os.remove(p) for p, _ in shots if os.path.exists(p)])   # private: no screenshot left in Temp
-    snap.start()
+    capture_early = args == ['--wait'] and os.environ.get('ATTICUS_CAPTURE_EARLY', '1') == '1'
+    if capture_early:
+        snap.start()
     if args == ['--wait']:   # "<app the user is in now>\t<request>", even if Claude could not start
         front_now, _, task = sys.stdin.readline().strip().rpartition('\t')
         os.environ['ATTICUS_FRONT'] = front_now or os.environ.get('ATTICUS_FRONT', '')
     task = task if args == ['--wait'] else ' '.join(a for a in args if a != '--plan') or ask()
     if not task:
         return warm and stop_claude(warm)
+    if not capture_early and needs_screen(task):
+        snap.start()
     ping()
     key = re.fullmatch(r'\W*(?:my )?(?:license )?key\W+([\w-]{8,})\W*', task, re.I)
     if key or not licensed():
@@ -1799,7 +1807,9 @@ def main():
     ctx = (f'About the user: {you} ' if you else '') + f'Front app: {app}. Front window: {win or "?"}.' + (f' Page: {url}.' if url else '') + f' Screens: {scr}. Now: {time.strftime("%a %b %d %Y %I:%M %p")}.'
     helps = []
     helping = threading.Thread(target=lambda: helps.append(tool_help(task)), daemon=True)
-    helping.start()   # beside the screen reads: a cold --help can take up to 2 s
+    legacy_help = pref('provider', 'claude') != 'codex'
+    if legacy_help:
+        helping.start()   # Codex has structured helpers, so it never needs arbitrary CLI --help probing
     mem = relevant_rules(task)
     procedure = workflows(task) if pref('learn', True) else ''
     int_hints = integrations.hints(task, INT)
@@ -1814,7 +1824,8 @@ def main():
     images = screen_for(task, snap, fx)
     if images == []:
         ctx += ' Screen capture unavailable. Do not guess screen contents; explain how to enable Screen Recording for Atticus.'
-    helping.join(4)
+    if legacy_help:
+        helping.join(4)
     prompt = (f'Context: {ctx}\n' + (f'Earlier:\n{earlier}' if earlier else '') + (f'Memory:\n{mem}\n' if mem else '') +
               (f'Integrations:\n{int_hints}\n' if int_hints else '') + ''.join(helps) +
               (f'Saved workflow (historical guidance):\n{procedure}\n' if procedure else '') + f'Request: {task}')

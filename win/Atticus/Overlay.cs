@@ -162,7 +162,12 @@ if (window.ui) installAtticusPointer();";
             composing = f.GetBoolean();
             if (!composing && !hovering && !busy) Hide(3);
         }
-        if (b.TryGetProperty("type", out _)) { fresh = false; if (listening) Hush(); }   // clicked or typed in the box while listening: stop the mic quietly
+        if (b.TryGetProperty("type", out _))
+        {
+            fresh = false;
+            if (listening) Hush();   // switching to text stops the microphone
+            if (!busy && warm == null) warm = Spawn(false);   // prepare Codex while the user types
+        }
         if (b.TryGetProperty("copy", out var cp) && cp.GetString() is { Length: > 0 } a) { try { Clipboard.SetText(a); } catch { } js("copied"); }
         if (b.TryGetProperty("send", out var sd)) Typed(sd.GetString(), true);
         if (b.TryGetProperty("mic", out _))
@@ -526,11 +531,12 @@ if (window.ui) installAtticusPointer();";
 
     // ---- the worker ----
     // atticus.py --wait, started at key-down so Claude is up by the time the user lets go; Run() hands it the words.
-    (Process p, StreamWriter input, string commit)? Spawn()
+    (Process p, StreamWriter input, string commit)? Spawn(bool captureEarly = true)
     {
         var c = Path.Combine(Path.GetTempPath(), "atticus-commit-" + Guid.NewGuid());
         Process p;
-        try { p = Py.Start(new[] { "--wait" }, new() { ["ATTICUS_UI"] = "1", ["ATTICUS_FRONT"] = Hooks.Mine, ["ATTICUS_COMMIT"] = c }, input: true); }
+        try { p = Py.Start(new[] { "--wait" }, new() { ["ATTICUS_UI"] = "1", ["ATTICUS_FRONT"] = Hooks.Mine, ["ATTICUS_COMMIT"] = c,
+            ["ATTICUS_CAPTURE_EARLY"] = captureEarly ? "1" : "0" }, input: true); }
         catch { return null; }
         p.OutputDataReceived += (_, e) => { if (e.Data != null) BeginInvoke(() => OnLine(p, e.Data)); };
         p.ErrorDataReceived += (_, e) => { if (e.Data != null) Program.Err(e.Data); };
@@ -598,7 +604,7 @@ if (window.ui) installAtticusPointer();";
         busy = true; answer = "";
         if (!speculative) js("think");
         if (warm is { } w0 && w0.p.HasExited) warm = null;
-        var w = warm ?? Spawn();
+        var w = warm ?? Spawn(false);
         if (w == null) { busy = false; js("msg", "Could not start atticus.py. Run setup again."); Hide(3); return; }
         warm = null; proc = w.Value.p; commit = w.Value.commit;
         if (!speculative)

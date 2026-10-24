@@ -1,6 +1,7 @@
 """Codex tool boundary regressions; no network or desktop actions."""
 import json
 import unittest
+import threading
 from unittest.mock import Mock, patch
 
 import atticus
@@ -77,6 +78,38 @@ class CodexTests(unittest.TestCase):
         with patch.object(codex, 'executable', return_value='codex.exe'), \
              patch.object(codex.subprocess, 'run', return_value=Mock(returncode=0)):
             self.assertIn('account limits', codex.plan()['text'])
+
+    def test_prewarming_prepares_context_without_starting_a_turn(self):
+        session = self.session()
+        session.ready = threading.Event()
+        session.startup_error = None
+        session.brain.pref.side_effect = lambda key, default: default
+        session.send = Mock()
+        session.request = Mock(side_effect=[{}, {'data': [{'model': 'available-model', 'isDefault': True}]},
+                                           {'thread': {'id': 'prepared-thread'}}])
+        session._prepare()
+        self.assertTrue(session.ready.is_set())
+        self.assertIsNone(session.startup_error)
+        self.assertEqual(session.thread_id, 'prepared-thread')
+        self.assertEqual([call.args[0] for call in session.request.call_args_list],
+                         ['initialize', 'model/list', 'thread/start'])
+        self.assertEqual(session.request.call_args.args[1]['sandbox'], 'read-only')
+
+    def test_failed_prewarm_wakes_waiter_without_a_request(self):
+        session = self.session()
+        session.ready = threading.Event()
+        session.startup_error = None
+        session.request = Mock(side_effect=RuntimeError('Disconnected'))
+        session._prepare()
+        self.assertTrue(session.ready.is_set())
+        self.assertEqual(session.startup_error, 'Disconnected')
+
+    def test_text_questions_do_not_require_screen_capture(self):
+        with patch.object(atticus, 'pref', side_effect=lambda key, default: default):
+            self.assertFalse(atticus.needs_screen('What is two plus two?'))
+            self.assertTrue(atticus.needs_screen('What is on both screens?'))
+        with patch.object(atticus, 'pref', return_value='never'):
+            self.assertFalse(atticus.needs_screen('Read this screen'))
 
 
 if __name__ == '__main__':
