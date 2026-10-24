@@ -12,7 +12,10 @@ sealed class Overlay : Form
 {
     // Moving, resizing, hovering and clicking are read in the page and sent here, like the Mac app's event monitors.
     const string PointerScript = @"
-addEventListener('DOMContentLoaded', () => {
+const installAtticusPointer = () => {
+  if (!window.ui || window.atticusPointerReady) return;
+  window.atticusPointerReady = true;
+  const ui = window.ui;
   const post = b => chrome.webview.postMessage({ n: 'w', b }), E = 6, C = 14;
   let st = null, hov = false, hot = false, tapping = false;
   const edge = (x, y) => { const w = innerWidth, h = innerHeight;
@@ -54,7 +57,9 @@ addEventListener('DOMContentLoaded', () => {
     post({ drop: s.k });
   }, true);
   addEventListener('click', e => { if (!tapping && !inComp(e)) { e.preventDefault(); e.stopPropagation(); } }, true);
-});";
+};
+addEventListener('atticus-ui-ready', installAtticusPointer);
+if (window.ui) installAtticusPointer();";
 
     WebView2 web;
     readonly Speech speech;

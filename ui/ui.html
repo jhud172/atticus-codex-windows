@@ -667,6 +667,7 @@
     xhot(on) { $('x').classList.toggle('hot', on); },
     copied() { status('Copied to clipboard'); setTimeout(() => $('status').textContent === 'Copied to clipboard' && status(''), 1400); },
   };
+  dispatchEvent(new Event('atticus-ui-ready'));
   fit(); post({ ready: 1 });
 </script>
 </body></html>

@@ -13,6 +13,8 @@ const messages = [], checks = [];
 const assert = (condition, name) => { if (!condition) throw Error(name); checks.push('✓ ' + name); };
 try {
   const html = await (await fetch('../ui/ui.html')).text(), orbs = await (await fetch('../ui/orbs.js')).text();
+  const native = await (await fetch('../win/Atticus/Overlay.cs')).text();
+  const pointer = native.match(/const string PointerScript = @"([\s\S]*?)";/)[1].replace(/""/g, '"');
   const ready = new Promise(resolve => window.addEventListener('message', e => {
     if (e.source !== frame.contentWindow) return;
     messages.push(e.data); if (e.data.ready) resolve();
@@ -25,10 +27,30 @@ try {
     const later = window.setTimeout;
     window.setTimeout = (f, ms, ...args) => ms === 60000 ? (window.expireApproval = f, 0) : later(f, ms, ...args);
     window.webkit = {messageHandlers: {c: {postMessage: m => parent.postMessage(m, '*')}, h: {postMessage: () => {}}}};
+    window.chrome = {webview: {postMessage: m => parent.postMessage({_pointer: m.b}, '*')}};
+    if (window.name === 'native-pointer') { ${pointer} }
   <\/script>`;
   frame.srcdoc = html.replace('/*ORBS*/', () => orbs).replace('<head>', '<head>' + bridge);
   await Promise.race([ready, new Promise((_, reject) => setTimeout(() => reject(Error('UI did not initialize')), 5000))]);
   const w = frame.contentWindow, d = w.document, ui = w.ui;
+  const nativeFrame = document.createElement('iframe'); nativeFrame.name = 'native-pointer';
+  document.body.append(nativeFrame);
+  const nativeMessages = [];
+  const nativeReady = new Promise(resolve => window.addEventListener('message', function receive(e) {
+    if (e.source !== nativeFrame.contentWindow) return;
+    nativeMessages.push(e.data); if (e.data.ready) resolve();
+  }));
+  nativeFrame.srcdoc = html.replace('/*ORBS*/', () => orbs).replace('<head>', '<head>' + bridge);
+  await Promise.race([nativeReady, new Promise((_, reject) => setTimeout(() => reject(Error('Native pointer fixture did not initialise')), 5000))]);
+  const nw = nativeFrame.contentWindow;
+  assert(nw.atticusPointerReady === true, 'Windows pointer handlers wait for the asynchronous overlay to be ready');
+  nw.dispatchEvent(new nw.Event('atticus-ui-ready'));
+  nw.ui.hover(true);
+  nativeMessages.length = 0;
+  nw.document.getElementById('ask').dispatchEvent(new nw.PointerEvent('pointerdown', {bubbles:true, button:0}));
+  await new Promise(r => setTimeout(r, 20));
+  assert(nativeMessages.filter(m => m._pointer?.key === 1).length === 1, 'Composer click requests native keyboard focus once, even after another ready event');
+  nativeFrame.remove();
   await new Promise(r => { let n = 0; const f = () => ++n >= 3 ? r() : w.requestAnimationFrame(f); w.requestAnimationFrame(f); setTimeout(r, 3000); });   // a fresh page draws its first frames late on a slow Mac or VM: timed checks start once frames run
   const tap = el => { const r = el.getBoundingClientRect(); ui.tap([r.x + r.width / 2, r.y + r.height / 2]); };
   ui.listen();
