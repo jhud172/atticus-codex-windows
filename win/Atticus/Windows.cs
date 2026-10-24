@@ -117,7 +117,7 @@ sealed class SettingsWindow : PageWindow
             case "unlearn": if (S("say") is { } say) Helper("--unlearn", say); break;
             case "checkUpdate": Updater.Check(Push); break;
             case "github": Web.Open("https://github.com/jhud172/atticus-codex-windows"); break;
-            case "resetHotkey": Prefs.Set("hotkeyCode", 0x20); Prefs.Set("hotkeyMods", 3); Prefs.Set("hotkeyLabel", "Ctrl+Alt+Space"); Push(); break;
+            case "resetHotkey": Prefs.Set("hotkeyCode", 0x20); Prefs.Set("hotkeyMods", 1); Prefs.Set("hotkeyLabel", "Alt+Space"); Push(); break;
             case "preview": if (S("sound") is { } n) Sound.Play(n, Prefs.Num("volume") * 2); break;
             case "setup": Program.Onboarding.Open(); break;
             case "openLog": if (File.Exists(Paths.Log)) Web.Open(Paths.Log); break;

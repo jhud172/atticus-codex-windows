@@ -1,0 +1,29 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Atticus control centre checks</title>
+<pre id="results">Running…</pre><iframe id="preview" title="Control centre preview" style="width:1020px;height:720px;border:0"></iframe>
+<script type="module">
+const checks=[], frame=document.getElementById('preview');
+const assert=(ok,name)=>{if(!ok)throw Error(name);checks.push(name);};
+try {
+ const html=await (await fetch('../ui/hub.html')).text(),js=await (await fetch('../ui/hub.js')).text(),css=await (await fetch('../ui/hub.css')).text();
+ const messages=[];
+ const ready=new Promise(resolve=>window.addEventListener('message',e=>{if(e.source===frame.contentWindow){messages.push(e.data);if(e.data.action==='ready')resolve();}}));
+ frame.srcdoc=html.replace('<head>','<head><script>window.webkit={messageHandlers:{hub:{postMessage:m=>parent.postMessage(m,"*")}}};<\/script>')
+  .replace('<link rel="stylesheet" href="hub.css">','<style>'+css+'</style>').replace('<script src="hub.js"></'+'script>','<script>'+js+'<\/script>');
+ await ready;const w=frame.contentWindow,d=w.document;
+ const state={history:[{task:'<img src=x onerror=alert(1)>',reply:'Test answer',receipts:[{status:'unverified',action:'type',details:'Check destination'}]}],projects:[{id:'fixture',name:'Fixture',path:'test folder',commands:[]}],reminders:[],jobs:[],changes:[],mcp:[],meetings:[]};
+ w.hub.load(state,'history');assert(!d.querySelector('#content img'),'History escapes HTML');assert(d.getElementById('content').textContent.includes('unverified'),'History displays receipt status');
+ for(const tab of ['workspaces','reminders','projects','jobs','meetings','extensions','history']){
+  w.hub.load(state,tab,{recordingLimit:600});assert(d.querySelector(`[data-tab="${tab}"]`).getAttribute('aria-current')==='page',tab+' navigation');
+  for(const input of d.querySelectorAll('#content input:not([type=hidden]),#content textarea,#content select')) assert(!!input.labels?.length||input.hasAttribute('aria-label'),tab+' fields labelled');
+ }
+ w.hub.load(state,'meetings',{recordingLimit:600});assert(d.getElementById('voice-limit').value==='600','Voice limit restores saved value');
+ w.hub.load(state,'reminders');d.getElementById('reminder-text').value='Draft reminder';d.getElementById('reminder-text').focus();w.hub.load(state,'reminders');assert(d.getElementById('reminder-text').value==='Draft reminder','Polling preserves active drafts');
+ d.getElementById('reminder-minutes').value='2';d.querySelector('[data-action="reminder_add"]').click();await new Promise(r=>setTimeout(r,20));assert(messages.some(m=>m.action==='reminder_add'&&m.text==='Draft reminder'&&m.seconds===120),'Reminder posts correct request');
+ d.activeElement.blur();w.hub.load(state,'reminders');assert(d.getElementById('reminder-text').value==='Draft reminder','Unfocused drafts survive refresh');
+ d.querySelector('[data-action="reminder_add"]').focus();w.hub.load(state,'reminders');assert(d.activeElement.dataset.action==='reminder_add','Keyboard button focus survives polling');
+ d.activeElement.blur();w.hub.load(state,'projects');d.querySelector('[data-action="project_files"]').click();await new Promise(r=>setTimeout(r,20));assert(messages.some(m=>m.action==='project_files'&&m.project==='fixture'),'Project listing targets granted ID');
+ w.hub.list(['one.txt','two.txt']);assert(d.getElementById('listing-text').textContent.includes('two.txt'),'Requested listings are visible');
+ for(const width of [1020,720,390]){frame.style.width=width+'px';await new Promise(r=>setTimeout(r,40));assert(d.documentElement.scrollWidth<=width+1,'No horizontal overflow at '+width);}
+ document.getElementById('results').textContent=checks.join('\n')+'\n'+checks.length+' checks passed.';document.getElementById('results').className='pass';
+}catch(error){document.getElementById('results').textContent=checks.join('\n')+'\nFAILED: '+error.message;document.getElementById('results').className='fail';}
+</script></html>

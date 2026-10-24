@@ -399,7 +399,7 @@
                 opus: 'Most capable. Slowest; uses your plan fastest.' };
   function paint() {
     if (!recording) showCaps(P.hotkeyLabel);
-    $('reset').style.display = (P.hotkeyLabel === 'Ctrl+Alt+Space' || P.hotkeyLabel === '⌃⌥Space') ? 'none' : '';
+    $('reset').style.display = (P.hotkeyLabel === 'Alt+Space' || P.hotkeyLabel === '⌃⌥Space') ? 'none' : '';
     document.querySelectorAll('.seg[data-k]').forEach(g => g.querySelectorAll('button').forEach(b => {
       const on = P[g.dataset.k] === b.dataset.v; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on);
     }));

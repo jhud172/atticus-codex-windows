@@ -13,6 +13,7 @@ static class Hooks
     public static Action<bool> Shortcut;     // pressed / released
     public static Func<bool> EscWanted;      // the box is up: Esc is ours
     public static Action Escape;
+    public static Action TypeShortcut;
     public static Action<int, int> ClickAt;  // a click anywhere (screen pixels)
     public static Action<int, int, string> Recorded;   // Settings → Change Shortcut: (vk, mods, label), vk 0 = cancelled
     public static Action<string> RecordingMods;
@@ -20,6 +21,7 @@ static class Hooks
     public static string Mine = "";          // the app the user is in, never Atticus itself
     public static IntPtr MineHwnd;
     static bool down;
+    static bool typingDown;
 
     public static void Install()
     {
@@ -65,6 +67,11 @@ static class Hooks
             return 1;
         }
         int vk = (int)Prefs.Num("hotkeyCode"), mods = (int)Prefs.Num("hotkeyMods");
+        if (k.vkCode == 0x20)
+        {
+            if (press && Mods() == 5) { if (!typingDown) { typingDown = true; Tap(0xE8); TypeShortcut?.Invoke(); } return 1; }
+            if (up && typingDown) { typingDown = false; return 1; }
+        }
         if (k.vkCode == vk)
         {
             if (press && Mods() == mods)

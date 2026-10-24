@@ -37,6 +37,9 @@ static class Web
         string html;
         try { html = File.ReadAllText(Paths.Ui(page)); } catch { html = $"missing {page}"; }
         if (html.Contains("/*ORBS*/")) html = html.Replace("/*ORBS*/", File.Exists(Paths.Ui("orbs.js")) ? File.ReadAllText(Paths.Ui("orbs.js")) : "");
+        if (page == "hub.html") html = html.Replace("<link rel=\"stylesheet\" href=\"hub.css\">", "<style>" + File.ReadAllText(Paths.Ui("hub.css")) + "</style>")
+            .Replace("<script src=\"hub.js\"></script>", "<script>" + File.ReadAllText(Paths.Ui("hub.js")) + "</script>");
+        if (page == "ui.html") html = html.Replace("<link rel=\"stylesheet\" href=\"overlay-additions.css\">", "<style>" + File.ReadAllText(Paths.Ui("overlay-additions.css")) + "</style>");
         v.CoreWebView2.NavigateToString(html);
         return v;
     }

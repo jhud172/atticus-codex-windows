@@ -12,12 +12,19 @@ class JavaScriptTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         files = list((root / 'ui').glob('*.html')) + list((root / 'tests').glob('*.html'))
         for path in files:
-            for attrs, code in re.findall(r'<script([^>]*)>(.*?)</script>', path.read_text(), re.S):
+            for attrs, code in re.findall(r'<script([^>]*)>(.*?)</script>', path.read_text(encoding='utf-8'), re.S):
                 if 'text/plain' in attrs or 'src=' in attrs:
                     continue
                 with self.subTest(file=path.name):
                     p = subprocess.run(['node', '--check', '--input-type=module'], input=code, capture_output=True, text=True)
                     self.assertEqual(p.returncode, 0, p.stderr)
+
+    def test_external_scripts_parse(self):
+        root = Path(__file__).resolve().parents[1]
+        for path in (root / 'ui').glob('*.js'):
+            with self.subTest(file=path.name):
+                p = subprocess.run(['node', '--check', str(path)], capture_output=True, text=True)
+                self.assertEqual(p.returncode, 0, p.stderr)
 
 
 if __name__ == '__main__':

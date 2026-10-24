@@ -15,6 +15,9 @@ sealed class Speech
     float loudest;
     System.Threading.Timer partial;
     int session;
+    int completedSamples;
+    readonly List<string> completedText = new();
+    const int ChunkSamples = 16000 * 30;
     public string Prompt = "";   // app names and the user's own words: Whisper leans toward them
     public bool Running => mic != null;
     public bool Ready => factory != null;
@@ -70,7 +73,7 @@ sealed class Speech
         Cancel();
         if (WaveIn.DeviceCount == 0) return "No microphone is available. Connect one and try again.";
         var ui = SynchronizationContext.Current;
-        lock (audio) { audio.Clear(); loudest = 0; }
+        lock (audio) { audio.Clear(); loudest = 0; completedSamples = 0; completedText.Clear(); }
         var me = ++session;
         mic = new WaveIn { WaveFormat = new WaveFormat(16000, 16, 1), BufferMilliseconds = 50 };
         int n = 0;
@@ -98,7 +101,14 @@ sealed class Speech
             {
                 float[] a; lock (audio) a = audio.ToArray();
                 if (a.Length < 8000 || loudest < 0.01f) return;
-                var t = await Transcribe(a);
+                while (a.Length - completedSamples >= ChunkSamples)
+                {
+                    var piece = await Transcribe(a.Skip(completedSamples).Take(ChunkSamples).ToArray());
+                    if (session != me) return;
+                    completedText.Add(piece); completedSamples += ChunkSamples;
+                }
+                var tail = a.Skip(completedSamples).ToArray();
+                var t = string.Join(" ", completedText.Append(tail.Length >= 4000 ? await Transcribe(tail) : "")).Trim();
                 if (session == me && mic != null) ui?.Post(_ => { if (session == me) onWords(t); }, null);
             }
             catch { }
@@ -118,7 +128,17 @@ sealed class Speech
         if (!Ready) return null;
         if (a.Length < 4000 || loudest < 0.01f) return "";   // nothing said
         await busy.WaitAsync();
-        try { return session == me ? await Transcribe(a) : null; }
+        try
+        {
+            if (session != me) return null;
+            var pieces = new List<string>(completedText);
+            for (int offset = completedSamples; offset < a.Length; offset += ChunkSamples)
+            {
+                pieces.Add(await Transcribe(a.Skip(offset).Take(ChunkSamples).ToArray()));
+                if (session != me) return null;
+            }
+            return string.Join(" ", pieces.Where(p => !string.IsNullOrWhiteSpace(p)));
+        }
         catch { return null; }
         finally { busy.Release(); }
     }
@@ -131,7 +151,12 @@ sealed class Speech
         mic?.Dispose(); mic = null;
     }
 
-    public Task<string> TranscribeOnce(float[] a) => Transcribe(a);
+    public async Task<string> TranscribeOnce(float[] a)
+    {
+        await busy.WaitAsync();
+        try { return await Transcribe(a); }
+        finally { busy.Release(); }
+    }
 
     async Task<string> Transcribe(float[] a)
     {

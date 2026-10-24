@@ -51,11 +51,11 @@ else {
 New-Item -ItemType Directory -Force $dest, "$dest\ui" | Out-Null
 Copy-Item "$out\*" $dest -Recurse -Force
 Remove-Item $out -Recurse -Force
-Copy-Item atticus.py, winctl.py, codex_provider.py $dest -Force
+Copy-Item atticus.py, winctl.py, codex_provider.py, assistant_services.py, mcp_bridge.py $dest -Force
 Copy-Item LICENSE, LICENSE-ADDITIONS.txt, THIRD-PARTY-NOTICES.md $dest -Force
 New-Item -ItemType Directory -Force "$dest\integrations" | Out-Null
 Copy-Item integrations\*.py "$dest\integrations" -Force
-Copy-Item ui\*.html, ui\*.js, ui\AppIcon.ico, ui\AppIcon.png "$dest\ui" -Force
+Copy-Item ui\*.html, ui\*.js, ui\*.css, ui\AppIcon.ico, ui\AppIcon.png "$dest\ui" -Force
 $version = (git log -1 --format='%h - %cd' --date=format:'%b %d, %Y' 2>$null)
 $codex = & "$venv\Scripts\python.exe" -c "import codex_provider; print(codex_provider.executable() or '')"
 @{ python = "$venv\Scripts\python.exe"; source = $PSScriptRoot; version = "$version"; codex = "$codex" } | ConvertTo-Json | Set-Content "$dest\atticus.json" -Encoding utf8
@@ -64,7 +64,7 @@ if ($Stage) { exit 0 }
 # Start menu shortcut, so "Atticus" opens Settings from Start
 $sh = New-Object -ComObject WScript.Shell
 $lnk = $sh.CreateShortcut("$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Atticus.lnk")
-$lnk.TargetPath = "$app\Atticus.exe"; $lnk.IconLocation = "$app\ui\AppIcon.ico"; $lnk.Description = 'Hold Ctrl+Alt+Space and talk'; $lnk.Save()
+$lnk.TargetPath = "$app\Atticus.exe"; $lnk.IconLocation = "$app\ui\AppIcon.ico"; $lnk.Description = 'Press Alt+Space to start or stop voice; Alt+Shift+Space to type'; $lnk.Save()
 
 # Starts at login unless turned off in Settings
 $prefs = Join-Path $env:APPDATA 'Atticus\settings.json'
@@ -74,4 +74,4 @@ if ($login) { Set-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\
 
 if ($env:ATTICUS_NO_RESTART) { exit 0 }
 Start-Process "$app\Atticus.exe"
-Write-Host 'Atticus is running. Hold Ctrl+Alt+Space and talk.'
+Write-Host 'Atticus is running. Press Alt+Space to start or stop voice; Alt+Shift+Space to type.'

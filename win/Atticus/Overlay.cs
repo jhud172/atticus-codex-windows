@@ -98,6 +98,7 @@ if (window.ui) installAtticusPointer();";
         Hooks.EscWanted = () => Visible && Opacity > 0;
         Hooks.Escape = Escape;
         Hooks.Shortcut = Shortcut;
+        Hooks.TypeShortcut = Compose;
         Hooks.ClickAt = (x, y) =>   // click anywhere else closes the box once the answer is up
         {
             if (!Visible || busy || listening || stuck || Bounds.Contains(x, y)) return;
@@ -156,6 +157,7 @@ if (window.ui) installAtticusPointer();";
             return;
         }
         if (name != "c" || b.ValueKind != JsonValueKind.Object) return;
+        if (b.TryGetProperty("hub", out var hub)) { Program.Hub.Open(hub.GetString() ?? "history"); return; }
         if (b.TryGetProperty("boxH", out var bh)) Prefs.D["boxH"] = bh.GetDouble();
         if (b.TryGetProperty("focus", out var f))
         {
@@ -173,7 +175,8 @@ if (window.ui) installAtticusPointer();";
         if (b.TryGetProperty("mic", out _))
         {
             fresh = false;
-            if (!busy && !listening) { clickTalk = true; Start(); if (!listening) clickTalk = false; }
+            if (listening) StopListening();
+            else if (!busy) { clickTalk = false; Start(); toggleTalk = true; }
         }
         if (b.TryGetProperty("ready", out _))
         {
@@ -278,6 +281,7 @@ if (window.ui) installAtticusPointer();";
 
     public void Hush()   // stop listening, drop what was heard, say nothing
     {
+        js("mic", false);
         speech.Cancel(); Stop(ref pauseItem); Stop(ref holdTimer); Unwarm();
         clickTalk = false; toggleTalk = false; Stop(ref quiet); stops++;
         listenID++;
@@ -376,7 +380,7 @@ if (window.ui) installAtticusPointer();";
             if (!listening) { Stop(ref holdTimer); return; }
             var held = (DateTime.Now - began).TotalSeconds;
             if (clickTalk && text.Length == 0 && held > 8) { Stop(ref holdTimer); Hush(); js("stopped", ""); Hide(3); return; }   // nothing said: stop the mic quietly
-            if (held > 60) { Stop(ref holdTimer); RecordingLimit(); return; }
+            if (held > Math.Clamp(Prefs.Num("recordingLimit"), 60, 1800)) { Stop(ref holdTimer); RecordingLimit(); return; }
             if (!toggleTalk && !clickTalk && !Hooks.ModsHeld()) { Stop(ref holdTimer); StopListening(); }
         };
         holdTimer.Start();
@@ -400,7 +404,7 @@ if (window.ui) installAtticusPointer();";
 
     void RecordingLimit()
     {
-        if (toggleTalk) Review("Recording paused after 60 seconds. Review your words and press Enter to send.");
+        if (toggleTalk) Review($"Recording paused after {Math.Clamp(Prefs.Num("recordingLimit"), 60, 1800):0} seconds. Review your words and press Enter to send.");
         else StopListening();
     }
 
@@ -473,6 +477,7 @@ if (window.ui) installAtticusPointer();";
 
     void StopListening()
     {
+        js("mic", false);
         if (!listening || (clickTalk && text.Length == 0)) return;
         Stop(ref holdTimer);
         clickTalk = false; toggleTalk = false; Stop(ref quiet);
@@ -624,4 +629,12 @@ if (window.ui) installAtticusPointer();";
 
     // Test hook: ATTICUS_DEMO="<request>" runs it once without the mic.
     public void Demo(string t) { js("listen"); ShowBox(); js("words", t); Run(t); }
+
+    public void Compose()
+    {
+        if (Prefs.Bool("paused")) return;
+        if (listening) Hush();
+        fresh = false; ShowBox(); TakeKeys(); js("compose", true);
+        if (!busy && warm == null) warm = Spawn(false);
+    }
 }

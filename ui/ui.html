@@ -232,15 +232,17 @@
     .mini { transform: none !important; transition: opacity .2s !important; }
     .mini-point { animation: none !important; transition: opacity .2s !important; }
   }
-</style></head>
+</style><link rel="stylesheet" href="overlay-additions.css"></head>
 <body>
 <div id="mode" title="Safe mode is off. Click to turn it on.">Full access</div>
 <div id="x"><svg viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9"/></svg></div>
 <div id="card">
-  <div id="head"><canvas id="orb"></canvas><div id="status"></div></div>
+  <div id="head"><canvas id="orb"></canvas><div id="status" role="status" aria-live="polite"></div></div>
+  <div id="tools" aria-label="Assistant tools"><button data-hub="history">History</button><button data-hub="workspaces">Workspaces</button><button data-hub="reminders">Reminders</button><button data-hub="projects">Projects</button><button data-hub="jobs">Tasks</button><button data-hub="meetings">Meetings</button></div>
   <div id="thread"></div>
   <div id="comp" inert><input id="ask" placeholder="Ask Atticus…" autocomplete="off" spellcheck="false" aria-label="Ask Atticus">
     <button id="mic" title="Talk instead" aria-label="Talk instead"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg></button></div>
+<div id="input-status" role="status">Mic off · Type a message or click the microphone</div>
 </div>
 <div class="e" id="eL"></div><div class="e" id="eR"></div><div class="e" id="eT"></div><div class="e" id="eB"></div>
 <div class="e" id="cTL"></div><div class="e" id="cTR"></div><div class="e" id="cBL"></div><div class="e" id="cBR"></div>
@@ -270,6 +272,14 @@
   const turn = () => $('thread').lastElementChild;
   const part = c => turn()?.querySelector('.' + c);
   const post = m => webkit.messageHandlers.c.postMessage(m);
+  document.querySelectorAll('[data-hub]').forEach(b=>b.onclick=()=>post({hub:b.dataset.hub}));
+  const micState = on => {
+    $('input-status').textContent = on ? 'Mic on · Click the microphone or press your shortcut to finish' : 'Mic off · Type a message or click the microphone';
+    $('input-status').classList.toggle('recording', on);
+    $('mic').setAttribute('aria-pressed', on ? 'true' : 'false');
+    $('mic').setAttribute('aria-label', on ? 'Stop recording and send' : 'Start microphone');
+    $('mic').title = on ? 'Stop recording and send' : 'Start microphone';
+  };
   let atBottom = true;   // the user scrolled up to read: new steps must not yank them back down
   // only the user's own wheel/trackpad decides (our scrolls and growing steps must not): up = stay put, back to the bottom = follow again
   $('thread').addEventListener('wheel', e => { if (e.deltaY < 0) atBottom = false; else setTimeout(() => { const t = $('thread'); atBottom = t.scrollHeight - t.scrollTop - t.clientHeight < 90; }, 0); }, { passive: true });
@@ -284,6 +294,7 @@
   let listening = false, hover = false, working = false;
   let compFrame = 0;
   const comp = (on, focus) => {
+    on = on || window.atticusPlatform === 'win';
     $('comp').inert = !on;
     if ($('comp').classList.contains('open') !== on) {
       $('comp').classList.toggle('open', on); fit();
@@ -296,6 +307,7 @@
   };
   // Clicking in or typing (not the cursor landing there from the shortcut): typing wins, so the mic stops and what was heard goes
   const drop = () => {
+    micState(false);
     if (listening) { listening = false; turn()?.remove(); setState('breathing'); status(''); boost = 1; $('orb').style.transform = ''; fit(); }
     post({ type: 1 });
   };
@@ -416,6 +428,7 @@
   };
 
   window.ui = {
+    mic(on) { micState(on); },
     selected(t) {   // the text Atticus is working from, so the user knows it saw the right thing
       const d = turn(); if (!d || !t.trim()) return;
       const s = document.createElement('div'); s.className = 'sel'; s.textContent = 'Selected: “' + t.trim().replace(/\s+/g, ' ') + '”';
@@ -460,6 +473,7 @@
       $('thread').querySelectorAll('.rewrite').forEach(e => e.remove());
       hover = false;
       listening = !keep;
+      micState(listening); $('mic').disabled = false;
       working = false;
       if (keep) $('ask').value = ''; else comp(false);
       if ($('thread').children.length) $('card').classList.add('again');
@@ -475,6 +489,7 @@
     level(v) { boost = 0.5 + Math.min(1, v) * 2.5; $('orb').style.transform = `scale(${1 + Math.min(1, v) * .1})`; },
     words(w) { const q = part('q'); if (q) { q.classList.toggle('empty', !w.trim()); q.textContent = w; fit(); } },
     think() {
+      micState(false); $('mic').disabled = true;
       clockBegin();
       listening = false;
       working = true;
@@ -497,6 +512,7 @@
         status(s, true);
         setState(/^(Searching|Reading|Looking|Taking|Checking|Finding|Waiting)/.test(s) ? 'searching' : /^(Moving|Opening|Using|Clicking|Scrolling|Pressing|Dragging|Typing)/.test(s) ? 'working' : 'connecting');
       } else if (tag === '✓') {
+        micState(false); $('mic').disabled = false;
         miniFinish(); clockStop();
         working = false;
         settle(); part('q')?.classList.remove('live'); status('');
@@ -525,6 +541,7 @@
       fit();
     },
     stopped(s) {   // Esc or the hotkey cut it off
+      micState(false); $('mic').disabled = false;
       miniClear(); clockStop();
       listening = false;
       working = false;
@@ -542,7 +559,7 @@
       if (on) comp(true);   // even while listening: the mic keeps going until the user clicks in
       else if (!on && !$('ask').value && document.activeElement !== $('ask')) comp(false);
     },
-    compose(on) { comp(on, on); },
+    compose(on) { if (on && listening) drop(); comp(on, on); },
     draft(t) { $('ask').value = t; comp(true, true); },
     tap([x, y]) {   // a click on the box, not a drag: on the answer = copy it, anywhere else = type
       const el = document.elementFromPoint(x, y), b = el?.closest('.ok button, .ok, .pk button, .pk, .rewrite button, .mini-view');
@@ -668,6 +685,7 @@
     copied() { status('Copied to clipboard'); setTimeout(() => $('status').textContent === 'Copied to clipboard' && status(''), 1400); },
   };
   dispatchEvent(new Event('atticus-ui-ready'));
+  if (window.atticusPlatform === 'win') comp(true);
   fit(); post({ ready: 1 });
 </script>
 </body></html>

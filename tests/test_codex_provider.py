@@ -16,6 +16,7 @@ class CodexTests(unittest.TestCase):
         session.brain.pref.return_value = True
         session.brain.label.return_value = 'Opening an app'
         session.commands = []
+        session.receipts = []
         session.ask = 'scratch'
         return session
 

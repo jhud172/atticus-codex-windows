@@ -7,7 +7,8 @@ maintainer's original contributions, all rights are reserved unless the
 maintainer grants permission in writing or applicable law permits the use.
 
 This notice covers the original Codex provider adapter in codex_provider.py,
-its original tests in tests/test_codex_provider.py, and original modifications
+assistant_services.py, mcp_bridge.py, the control centre and meeting-notes
+additions, their original tests, and original modifications
 and documentation introduced by this edition. It does not claim rights in
 pre-existing code, interfaces, artwork, dependencies, names or other material
 owned by third parties. Those materials retain their existing licences.

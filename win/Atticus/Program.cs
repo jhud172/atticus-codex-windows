@@ -12,6 +12,8 @@ static class Program
     public static SettingsWindow Settings;
     public static OnboardingWindow Onboarding;
     public static Tray Tray;
+    public static HubWindow Hub;
+    public static MeetingNotes Meeting = new();
     public static Speech Speech = new();
     static SynchronizationContext ui;
 
@@ -28,6 +30,13 @@ static class Program
             Console.WriteLine("native selftest ok"); return;
         }
         if (args.Length >= 2 && args[0] == "--text") Environment.Exit(WindowText.Run(args[1], args.Length > 2 ? args[2] : ""));
+        if (args.Length == 2 && args[0] == "--transcribe-file")
+        {
+            Speech.Load().Wait();
+            if (!Speech.Ready) { Console.Error.WriteLine("Speech model unavailable."); Environment.Exit(1); }
+            Console.WriteLine(Web.Json(MeetingNotes.TranscribeAudio(args[1], "Audio file", null, CancellationToken.None).Result));
+            return;
+        }
         if (args.Length == 2 && args[0] == "--transcribe")   // diagnostics: a 16 kHz mono WAV through the same speech path
         {
             Speech.Load().Wait();
@@ -52,6 +61,7 @@ static class Program
         }
         Application.Run(ctx);
         Box?.Hush(); Voice.Shush();
+        Meeting.Shutdown();
     }
 
     static void Check(bool ok) { if (!ok) { Console.Error.WriteLine("native selftest failed"); Environment.Exit(1); } }
@@ -62,12 +72,14 @@ static class Program
         Directory.CreateDirectory(Paths.Config);
         Settings = new SettingsWindow();
         Onboarding = new OnboardingWindow();
+        Hub = new HubWindow();
         Tray = new Tray();
         Box = new Overlay(Speech);
         await Box.Init();
         Hooks.Install();
         _ = Speech.Load();
         Listen();
+        Hub.Start();
         Updater.Schedule();
         if (!Prefs.Bool("onboarded") || !File.Exists(Paths.Model)) Onboarding.Open();
         else _ = Task.Run(() => OnboardingWindow.Plan()).ContinueWith(t => { if (t.Result.TryGetProperty("ok", out var ok) && !ok.GetBoolean()) Post(() => Onboarding.Open()); });   // set up once, but Claude signed out since
@@ -107,6 +119,8 @@ static class Program
             case "notify": Tray.Notify(p.Length > 1 ? p[1] : ""); break;
             case "open": if (Prefs.Bool("onboarded")) Settings.Open(); else Onboarding.Open(); break;
             case "update": Updater.Check(() => Settings.Push()); break;   // check now (support and tests)
+            case "hub": Hub.Open(p.Length > 1 ? p[1] : "history"); break;
+            case "compose": Box.Compose(); break;
         }
     }
 
@@ -193,6 +207,8 @@ sealed class Tray
         m.Items.Add(new ToolStripMenuItem(Prefs.Bool("paused") ? "Atticus is paused" : hint) { Enabled = false });
         m.Items.Add(new ToolStripSeparator());
         m.Items.Add("Ask Atticus", null, (_, _) => { Program.Box.clickTalk = true; Program.Box.Start(); });
+        m.Items.Add("Type to Atticus", null, (_, _) => Program.Box.Compose());
+        m.Items.Add("Control centre…", null, (_, _) => Program.Hub.Open());
         m.Items.Add(Prefs.Bool("paused") ? "Resume Atticus" : "Pause Atticus", null, (_, _) => { Program.Settings.Apply("paused", !Prefs.Bool("paused")); Program.Settings.Push(); });
         m.Items.Add(new ToolStripSeparator());
         m.Items.Add(new ToolStripMenuItem(Today()) { Enabled = false });
@@ -220,6 +236,6 @@ sealed class Tray
             }
         }
         catch { }
-        return $"Today: {n} ask{(n == 1 ? "" : "s")} · " + (usd < 1 ? $"{usd * 100:0.00}¢" : $"${usd:0.00}");
+        return $"Today: {n} ask{(n == 1 ? "" : "s")} · " + (Prefs.Str("provider") == "codex" ? "Codex account limits apply" : usd < 1 ? $"{usd * 100:0.00}¢" : $"${usd:0.00}");
     }
 }

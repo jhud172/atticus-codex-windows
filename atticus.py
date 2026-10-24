@@ -24,6 +24,23 @@ tasks on the Mac. Output lines for the overlay: "· note", "▸ step", "✓ answ
 Completed requests go to %APPDATA%/Atticus/log.jsonl with their cost (live actions are marked).
 """
 import atexit, base64, html, json, platform, shlex, shutil, threading, os, re, signal, subprocess, sys, tempfile, time, urllib.parse, urllib.request
+
+# Frequent native reminder/state polls do not need desktop imports or AI setup.
+if __name__ == '__main__' and sys.argv[1:] == ['--hub']:
+    import assistant_services
+    try:
+        request = json.load(sys.stdin)
+        brain = None
+        if request.get('action') in ('workspace_capture', 'workspace_restore'):
+            import winctl
+            from types import SimpleNamespace
+            brain = SimpleNamespace(winctl=winctl)
+        result = assistant_services.run_cli(request, brain)
+    except (ValueError, TypeError, AttributeError) as error:
+        result = {'ok': False, 'error': str(error)}
+    print(json.dumps(result, ensure_ascii=False))
+    raise SystemExit
+
 try:
     import winctl
 except ImportError:   # tests and syntax checks on other systems
@@ -805,6 +822,13 @@ def fast(text):
     """Simple commands with no AI: learned shortcuts, open <app/site>, snap/move <it/app> left/right/full/center, to laptop/monitor.
     Returns a reply, or None to hand the request to Haiku. fast.cmds: the commands that did it, so "When I say X, …" can save them."""
     fast.cmds = []
+    if os.environ.get('ATTICUS_LIVE') != '1':
+        import assistant_services
+        try:
+            service = assistant_services.quick(text, sys.modules[__name__])
+            if service: return service
+        except (ValueError, OSError):
+            pass   # ambiguous or missing targets go through the normal assistant
     named = NAMED.match(text.strip())
     if named and pref('learn', True):   # "When I say work mode, open Spotify": do it now, no AI, and save the words
         if os.environ.get('ATTICUS_LIVE') == '1': return None
@@ -1177,11 +1201,12 @@ def say(tag, text):
 
 
 def log_turn(task, reply, started, cost=0, steps=0, ran=(), pics=0):
-    with open(os.path.join(DIR, 'log.jsonl'), 'a') as f:
+    with open(os.path.join(DIR, 'log.jsonl'), 'a', encoding='utf-8') as f:
         f.write(json.dumps({'at': time.strftime('%Y-%m-%d %H:%M:%S'), 'task': task, 'reply': reply,
                             'usd': round(cost, 5), 'costKnown': pref('provider', 'claude') != 'codex',
                             'provider': pref('provider', 'claude'), 'secs': round(time.time() - started, 1), 'steps': steps,
-                            'ran': list(ran) or getattr(replay, 'ran', []), 'live': os.environ.get('ATTICUS_LIVE') == '1', 'pics': pics}) + '\n')
+                            'ran': list(ran) or getattr(replay, 'ran', []), 'receipts': getattr(run, 'receipts', []),
+                            'live': os.environ.get('ATTICUS_LIVE') == '1', 'pics': pics}) + '\n')
 
 
 def history(words):
@@ -1352,6 +1377,7 @@ def relay(p):
 def run(task, p=None, shots=()):
     """One request through `claude -p --model haiku` (the user's plan), streaming notes and steps. shots: [(path, label)] sent with it."""
     run.cmds = run.ran = []
+    run.receipts = []
     run.ok = False
     p = p or start_claude()
     if not p:
@@ -1579,6 +1605,12 @@ def retry_offer(sonnet):
 
 def main():
     args = sys.argv[1:]
+    if args == ['--hub']:
+        import assistant_services
+        return print(json.dumps(assistant_services.run_cli(json.load(sys.stdin), sys.modules[__name__])))
+    if args[:1] == ['--job-worker'] and len(args) == 2:
+        import assistant_services
+        return assistant_services.job_worker(args[1])
     if args == ['--wait'] or args[:1] == ['--fast']:
         signal.signal(signal.SIGTERM, stop_workers)   # Atticus.exe also ends the whole tree (a job object)
     if args[:1] == ['--watch'] and (len(args) in (5, 6) and args[3] in ('gone', 'shows') or len(args) in (3, 4) and args[1] == 'cmd'):

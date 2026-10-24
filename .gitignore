@@ -47,3 +47,8 @@ atticus.json
 node_modules/
 *.user
 *.suo
+assistant.json
+assistant.lock
+jobs/
+backups/
+meetings/
