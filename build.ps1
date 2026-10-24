@@ -51,7 +51,7 @@ else {
 New-Item -ItemType Directory -Force $dest, "$dest\ui" | Out-Null
 Copy-Item "$out\*" $dest -Recurse -Force
 Remove-Item $out -Recurse -Force
-Copy-Item atticus.py, winctl.py, codex_provider.py, assistant_services.py, mcp_bridge.py $dest -Force
+Copy-Item atticus.py, winctl.py, codex_provider.py, assistant_services.py, mcp_bridge.py, personal_mcp.py, outlook_mcp.ps1 $dest -Force
 Copy-Item LICENSE, LICENSE-ADDITIONS.txt, THIRD-PARTY-NOTICES.md $dest -Force
 New-Item -ItemType Directory -Force "$dest\integrations" | Out-Null
 Copy-Item integrations\*.py "$dest\integrations" -Force

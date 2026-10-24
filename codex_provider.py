@@ -85,6 +85,7 @@ Use atticus_service for expanded capabilities:
 state/history/project_list/job_status; reminder_add {text,seconds or due ISO date}; reminder_cancel/reminder_snooze {id};
 workspace_capture {name}, workspace_restore {id}, workspace_save {name,entries:[{app,where,screen}]};
 project_files {project,query?}, project_read {project,path}, project_preview {project,path,content}, project_apply {id};
+For project work, read its AGENTS.md and relevant README before proposing changes; preserve its documented boundaries. Do not read credential files.
 project_preview creates a diff, not a file edit. Preview first, then apply only after approval. Do not grant your own folder access.
 project_run {project,command} runs a saved human-configured command as a background job. Show the actual command for approval.
 background_start {prompt,name?} runs research without attaching the user's screen; job_cancel {id} stops a job.
@@ -253,6 +254,25 @@ class Session:
         self.receipts.append({'action':action,'status':'declined','details':message})
         return self.output(message,False)
 
+    def external_request(self, server, method, params):
+        """Keep stateful MCP tools alive for the current task, including browser pages."""
+        import mcp_bridge
+        clients=self.__dict__.setdefault('mcp_clients',{})
+        config=mcp_bridge.config_for(server)
+        client=clients.get(server)
+        if client is not None and client.config!=config:
+            client.__exit__();clients.pop(server,None);client=None
+        if client is None:
+            client=mcp_bridge.Client(config).__enter__();clients[server]=client
+        try: return client.request(method,params)
+        except Exception:
+            clients.pop(server,None);client.__exit__();raise
+
+    def close_external(self):
+        for client in self.__dict__.pop('mcp_clients',{}).values():
+            try: client.__exit__()
+            except (OSError,RuntimeError,subprocess.SubprocessError): pass
+
     def service_action(self, params):
         import assistant_services as services
         import mcp_bridge
@@ -264,7 +284,7 @@ class Session:
                 description='MCP '+payload['server']+' / '+payload['tool']+'\n'+json.dumps(payload['arguments'],ensure_ascii=False)[:2000]
                 if b.ask_user({'q':'Allow this external tool call?','cmd':description},60)!='y': return self.declined('MCP '+payload['server']+'/'+payload['tool'])
                 b.say('·','Running approved external tool')
-                result=mcp_bridge.call(payload['server'],payload['tool'],payload['arguments'])
+                result=self.external_request(payload['server'],'tools/call',{'name':payload['tool'],'arguments':payload['arguments']})
                 name='MCP '+payload['server']+'/'+payload['tool']
                 self.commands.append(name)
                 self.receipts.append({'action':name,'status':'failed' if result.get('isError') else 'unverified','details':'Review the external tool result; its effect has not been independently observed.'})
@@ -339,6 +359,7 @@ class Session:
             b.run.receipts = self.receipts
             return 'Codex could not finish: ' + str(e), 0, []
         finally:
+            self.close_external()
             b.stop_claude(self)
             self.process.wait(timeout=10)
             self.errors.close()

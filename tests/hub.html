@@ -12,7 +12,7 @@ try {
  await ready;const w=frame.contentWindow,d=w.document;
  const state={history:[{task:'<img src=x onerror=alert(1)>',reply:'Test answer',receipts:[{status:'unverified',action:'type',details:'Check destination'}]}],projects:[{id:'fixture',name:'Fixture',path:'test folder',commands:[]}],reminders:[],jobs:[],changes:[],mcp:[],meetings:[]};
  w.hub.load(state,'history');assert(!d.querySelector('#content img'),'History escapes HTML');assert(d.getElementById('content').textContent.includes('unverified'),'History displays receipt status');
- for(const tab of ['workspaces','reminders','projects','jobs','meetings','extensions','history']){
+ for(const tab of ['setup','workspaces','reminders','projects','jobs','meetings','extensions','history']){
   w.hub.load(state,tab,{recordingLimit:600});assert(d.querySelector(`[data-tab="${tab}"]`).getAttribute('aria-current')==='page',tab+' navigation');
   for(const input of d.querySelectorAll('#content input:not([type=hidden]),#content textarea,#content select')) assert(!!input.labels?.length||input.hasAttribute('aria-label'),tab+' fields labelled');
  }
@@ -23,6 +23,8 @@ try {
  d.querySelector('[data-action="reminder_add"]').focus();w.hub.load(state,'reminders');assert(d.activeElement.dataset.action==='reminder_add','Keyboard button focus survives polling');
  d.activeElement.blur();w.hub.load(state,'projects');d.querySelector('[data-action="project_files"]').click();await new Promise(r=>setTimeout(r,20));assert(messages.some(m=>m.action==='project_files'&&m.project==='fixture'),'Project listing targets granted ID');
  w.hub.list(['one.txt','two.txt']);assert(d.getElementById('listing-text').textContent.includes('two.txt'),'Requested listings are visible');
+ state.setup={sha256:'sample-digest',projects:[{name:'Fixture project',path:'C:/fixture',commands:[]}],mcp:[{name:'fixture-server',config:{command:'test'},connectionStatus:'sign_in_required',connectionMessage:'Sign in yourself.'}]};
+ w.hub.load(state,'setup');assert(d.getElementById('content').textContent.includes('C:/fixture'),'Prepared setup shows exact paths');d.querySelector('[data-action="setup_apply"]').click();await new Promise(r=>setTimeout(r,20));assert(messages.some(m=>m.action==='setup_apply'&&m.sha256==='sample-digest'),'Setup approval uses the reviewed digest');
  for(const width of [1020,720,390]){frame.style.width=width+'px';await new Promise(r=>setTimeout(r,40));assert(d.documentElement.scrollWidth<=width+1,'No horizontal overflow at '+width);}
  document.getElementById('results').textContent=checks.join('\n')+'\n'+checks.length+' checks passed.';document.getElementById('results').className='pass';
 }catch(error){document.getElementById('results').textContent=checks.join('\n')+'\nFAILED: '+error.message;document.getElementById('results').className='fail';}

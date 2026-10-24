@@ -62,6 +62,10 @@ sealed class HubWindow : PageWindow
         if (operation == "search") { query = S("query"); RefreshState(); return; }
         if (operation == "tab") { tab = S("tab"); RefreshState(); return; }
         if (operation == "ask") { Program.Box.Demo(S("text")); return; }
+        if (operation == "setup_apply")
+        {
+            if (MessageBox.Show(this, "Approve the project folders, saved commands and connector definitions shown in Review setup? Local servers and commands run with your Windows account access. Later file edits, commands and MCP calls still require approval. External account sign-ins remain separate.", "Approve reviewed setup", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+        }
         if (operation == "project_grant")
         {
             using var dialog = new FolderBrowserDialog { Description = "Choose the project folder Atticus may read and propose edits to", UseDescriptionForTitle = true };

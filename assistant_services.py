@@ -113,7 +113,7 @@ def history(query='', limit=150):
     return records[-limit:][::-1]
 
 
-DENIED_PARTS = {'.git', '.ssh', '.aws', '.azure', '.codex', '.claude', 'node_modules', '.venv'}
+DENIED_PARTS = {'.git', '.ssh', '.aws', '.azure', '.codex', '.codex-runtime', '.mcp-auth', '.claude', 'node_modules', '.venv'}
 DENIED_FILES = {'auth.json', 'credentials', 'credentials.json', 'secrets.json', 'id_rsa', 'id_ed25519'}
 
 
@@ -124,14 +124,14 @@ def project_path(project, relative, allow_new=False):
         raise ValueError('Use a relative path inside the approved project folder.')
     if any(p.casefold() in DENIED_PARTS for p in requested.parts):
         raise ValueError('Dependency, credential and source-control internals are excluded.')
-    if requested.name.casefold().startswith('.env') or requested.name.casefold() in DENIED_FILES or requested.suffix.lower() in ('.key', '.pem', '.pfx', '.p12'):
+    if re.search(r'(^|\.)env(\.|$)',requested.name,re.I) or requested.name.casefold() in DENIED_FILES or requested.suffix.lower() in ('.key', '.pem', '.pfx', '.p12'):
         raise ValueError('Credential files are excluded from project tools.')
     target = (base / requested).resolve(strict=not allow_new)
     if not target.is_relative_to(base) or target == base:
         raise ValueError('The path leaves the approved project folder.')
     # Also check the resolved path: an innocently named symlink cannot expose credentials.
     parts = target.relative_to(base).parts
-    if any(p.casefold() in DENIED_PARTS for p in parts) or target.name.casefold().startswith('.env') or target.name.casefold() in DENIED_FILES or target.suffix.lower() in ('.key','.pem','.pfx','.p12'):
+    if any(p.casefold() in DENIED_PARTS for p in parts) or re.search(r'(^|\.)env(\.|$)',target.name,re.I) or target.name.casefold() in DENIED_FILES or target.suffix.lower() in ('.key','.pem','.pfx','.p12'):
         raise ValueError('The resolved file is excluded from project tools.')
     return target
 
@@ -293,20 +293,82 @@ def public_state(data, query=''):
             except ValueError: pass
     return {'reminders': data['reminders'], 'workspaces': data['workspaces'], 'projects': data['projects'],
             'changes': [{k:v for k,v in c.items() if k!='content'} for c in data['changes'][-50:][::-1]], 'jobs': jobs, 'mcp': data['mcp'],
-            'history': history(query), 'meetings': meetings}
+            'history': history(query), 'meetings': meetings, 'setup': setup_preview() if (root()/'pending-setup.json').exists() else None}
 
 
 READ_ACTIONS = {'state', 'history', 'project_list', 'project_read', 'project_files', 'job_status', 'mcp_tools'}
-TRUSTED_ACTIONS = {'project_grant', 'project_revoke', 'command_save', 'mcp_save', 'mcp_remove', 'recover', 'tick'}
+TRUSTED_ACTIONS = {'project_grant', 'project_revoke', 'command_save', 'mcp_save', 'mcp_remove', 'recover', 'tick', 'setup_preview', 'setup_apply'}
 SUPPORTED_ACTIONS = READ_ACTIONS | TRUSTED_ACTIONS | {'project_preview','project_apply','project_reject','reminder_add','reminder_cancel','reminder_snooze','workspace_capture','workspace_save','workspace_restore','workspace_remove','project_run','background_start','job_cancel'}
+
+
+def validate_mcp_config(name, config):
+    name=str(name)
+    if not re.fullmatch(r'[a-zA-Z][a-zA-Z0-9_-]{0,39}',name): raise ValueError('Use a short server name with letters, digits, underscores or hyphens.')
+    if not isinstance(config,dict) or not (config.get('command') or config.get('url')): raise ValueError('Provide an MCP command or HTTP URL.')
+    if set(config)-{'command','args','url','env_vars','bearer_token_env_var','server_options'}: raise ValueError('Unsupported MCP setting. Use environment variable names for credentials.')
+    options=config.get('server_options',{})
+    if not isinstance(options,dict) or set(options)-{'IJ_MCP_SERVER_PORT','BLENDER_HOST','BLENDER_PORT','DISABLE_TELEMETRY'}: raise ValueError('Only local development ports/host and telemetry settings may be embedded in server_options.')
+    for key,value in options.items():
+        if not isinstance(value,str) or (key.endswith('_PORT') and (not value.isdigit() or not 1<=int(value)<=65535)) or (key=='BLENDER_HOST' and value not in ('127.0.0.1','localhost','::1')) or (key=='DISABLE_TELEMETRY' and value not in ('true','false')): raise ValueError('Invalid local server option: '+key)
+    if config.get('command') and config.get('url'): raise ValueError('Choose one MCP transport, command or URL.')
+    if config.get('command') and (not isinstance(config['command'],str) or '\0' in config['command']): raise ValueError('Use an executable path for the MCP command.')
+    for key in ('args','env_vars'):
+        if key in config and (not isinstance(config[key],list) or not all(isinstance(v,str) and '\0' not in v for v in config[key])): raise ValueError(key+' must be an array of strings.')
+    if config.get('url') and not str(config['url']).startswith(('https://','http://localhost:','http://127.0.0.1:')): raise ValueError('Use HTTPS or a loopback MCP server.')
+    if config.get('url'):
+        address=urllib.parse.urlsplit(config['url'])
+        if address.username or address.password or any(k.casefold() in ('token','key','api_key','access_token') for k,v in urllib.parse.parse_qsl(address.query)): raise ValueError('Keep credentials in a token environment variable rather than the MCP URL.')
+    if any(k in config for k in ('bearer_token','http_headers','env')): raise ValueError('Use environment variable names, rather than embedded credentials.')
+
+
+def setup_preview():
+    path=root()/'pending-setup.json'
+    if path.stat().st_size>150000: raise ValueError('The setup proposal is too large.')
+    raw=path.read_bytes(); proposal=json.loads(raw)
+    if not isinstance(proposal,dict) or not isinstance(proposal.get('projects'),list) or not isinstance(proposal.get('mcp'),list): raise ValueError('Invalid setup proposal.')
+    return {**proposal,'sha256':hashlib.sha256(raw).hexdigest()}
+
+
+def apply_setup(digest):
+    proposal=setup_preview()
+    if digest!=proposal['sha256']: raise ValueError('The setup proposal changed. Review it again before approving.')
+    # Validate every grant and definition before changing any existing state.
+    for project in proposal['projects']:
+        grant_project({'projects':[]},project['name'],project['path'])
+        for command in project.get('commands',[]):
+            argv=command['argv']
+            if not command.get('name') or not isinstance(argv,list) or not argv or len(argv)>100 or not all(isinstance(v,str) and '\0' not in v for v in argv): raise ValueError('Invalid saved command.')
+            if not (Path(argv[0]).is_file() or shutil.which(argv[0])): raise ValueError('The saved command executable is missing: '+command['name'])
+    for server in proposal['mcp']: validate_mcp_config(server['name'],server['config'])
+    with database() as data:
+        atomic(root()/('before-reviewed-setup-'+identifier()+'.backup.json'),data)
+        for project in proposal['projects']:
+            item=grant_project(data,project['name'],project['path'])
+            for command in project.get('commands',[]):
+                if not any(c['name']==command['name'] and c['argv']==command['argv'] for c in item['commands']): item['commands'].append({'id':identifier(),**command})
+        for server in proposal['mcp']:
+            data['mcp']=[m for m in data['mcp'] if m['name']!=server['name']]
+            data['mcp'].append({'id':identifier(),**{k:v for k,v in server.items() if k in ('name','config','connectionStatus','connectionMessage','checked')}})
+    os.replace(root()/'pending-setup.json',root()/'applied-setup.json')
+    return receipt('verified','Reviewed project folders and connector definitions saved. Connections marked sign-in required still need browser authorisation.')
 
 
 def dispatch(request, brain=None, trusted_ui=False):
     action = request.get('action')
     if action=='mcp_tools':
         import mcp_bridge
-        return mcp_bridge.tools(request['server'])
+        try:
+            tools=mcp_bridge.tools(request['server'])
+        except (ValueError,OSError,RuntimeError) as error:
+            with database() as data:
+                item=row(data['mcp'],request['server']);item.update(connectionStatus='needs_attention',checked=stamp(),connectionMessage=str(error)[:500])
+            raise
+        with database() as data:
+            item=row(data['mcp'],request['server']);item.update(connectionStatus='catalogue_ready',checked=stamp(),connectionMessage=str(len(tools))+' tools available. Tool execution still requires approval.')
+        return tools
     if action in TRUSTED_ACTIONS and not trusted_ui: raise ValueError('This permission must be configured by you in the control centre.')
+    if action=='setup_preview': return setup_preview()
+    if action=='setup_apply': return apply_setup(request['sha256'])
     launch = None
     with database() as data:
         if action == 'state': return public_state(data, str(request.get('query', '')))
@@ -427,18 +489,7 @@ def dispatch(request, brain=None, trusted_ui=False):
         elif action == 'job_status': return data['jobs']
         elif action == 'mcp_save':
             config=request['config']; name=str(request['name'])
-            if not re.fullmatch(r'[a-zA-Z][a-zA-Z0-9_-]{0,39}',name): raise ValueError('Use a short server name with letters, digits, underscores or hyphens.')
-            if not isinstance(config,dict) or not (config.get('command') or config.get('url')): raise ValueError('Provide an MCP command or HTTP URL.')
-            if set(config)-{'command','args','url','env_vars','bearer_token_env_var'}: raise ValueError('Supported MCP settings are command, args, url, env_vars and bearer_token_env_var. Use environment variable names for credentials.')
-            if config.get('command') and config.get('url'): raise ValueError('Choose one MCP transport, command or URL.')
-            if config.get('command') and (not isinstance(config['command'],str) or '\0' in config['command']): raise ValueError('Use an executable path for the MCP command.')
-            for key in ('args','env_vars'):
-                if key in config and (not isinstance(config[key],list) or not all(isinstance(v,str) and '\0' not in v for v in config[key])): raise ValueError(key+' must be an array of strings.')
-            if config.get('url') and not str(config['url']).startswith(('https://','http://localhost:','http://127.0.0.1:')): raise ValueError('Use HTTPS or a loopback MCP server.')
-            if config.get('url'):
-                address=urllib.parse.urlsplit(config['url'])
-                if address.username or address.password or any(k.casefold() in ('token','key','api_key','access_token') for k,v in urllib.parse.parse_qsl(address.query)): raise ValueError('Keep credentials in a token environment variable rather than the MCP URL.')
-            if any(k in config for k in ('bearer_token','http_headers','env')): raise ValueError('Use environment variable names, rather than embedded credentials.')
+            validate_mcp_config(name,config)
             data['mcp']=[m for m in data['mcp'] if m['name']!=name]; data['mcp'].append({'id':identifier(),'name':name,'config':config}); return receipt('verified','MCP configuration saved for new requests.')
         elif action == 'mcp_remove':
             data['mcp'].remove(row(data['mcp'],request['id'])); return receipt('verified','MCP server removed.')

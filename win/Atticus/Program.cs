@@ -30,6 +30,17 @@ static class Program
             Console.WriteLine("native selftest ok"); return;
         }
         if (args.Length >= 2 && args[0] == "--text") Environment.Exit(WindowText.Run(args[1], args.Length > 2 ? args[2] : ""));
+        if (args.Length == 2 && args[0] == "--meeting-capture-test")
+        {
+            try
+            {
+                Speech.Load().Wait();
+                if (!Speech.Ready) throw new InvalidOperationException("Speech model unavailable.");
+                Console.WriteLine(Web.Json(MeetingNotes.CaptureTest(args[1]).GetAwaiter().GetResult()));
+            }
+            catch (Exception error) { Console.Error.WriteLine(error.Message); Environment.Exit(1); }
+            return;
+        }
         if (args.Length == 2 && args[0] == "--transcribe-file")
         {
             Speech.Load().Wait();

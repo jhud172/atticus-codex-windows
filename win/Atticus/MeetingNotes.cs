@@ -21,22 +21,66 @@ sealed class MeetingNotes
     {
         if (recording || transcription != null) { Status("Finish the current recording or transcription first."); return; }
         if (MessageBox.Show("Record system audio and your microphone locally for meeting notes? Make sure participants know you are recording. Audio is deleted after transcription; transcript text is saved locally.", "Start meeting recording", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
-        folder = Path.Combine(Paths.Local, "recording-" + Guid.NewGuid()); Directory.CreateDirectory(folder);
         try
         {
-            system = new WasapiRecorderBuilder().WithLoopbackCapture().Build();
-            systemWriter = new WaveFileWriter(Path.Combine(folder, "system.wav"), system.WaveFormat);
-            system.DataAvailable += (buffer, flags, devicePosition, qpcPosition) => { lock (audioLock) systemWriter?.Write(buffer); };
-            mic = new WaveIn { WaveFormat = new WaveFormat(16000, 16, 1), BufferMilliseconds = 100 };
-            micWriter = new WaveFileWriter(Path.Combine(folder, "microphone.wav"), mic.WaveFormat);
-            mic.DataAvailable += (_, e) => { lock (audioLock) micWriter?.Write(e.Buffer, 0, e.BytesRecorded); };
-            system.StartRecording(); mic.StartRecording(); started = DateTime.Now; recording = true;
+            BeginCapture(true); started = DateTime.Now; recording = true;
             limit = new System.Windows.Forms.Timer { Interval = 1000 };
             limit.Tick += async (_, _) => { if ((DateTime.Now - started).TotalHours >= 2) await Stop(); };
             limit.Start(); Status("Recording system audio and microphone. Stop when the meeting ends.");
             Program.Tray.Notify("Meeting recording started. Stop it in the control centre.");
         }
         catch (Exception error) { DisposeCapture(); recording = false; DeleteCapture(); Status("Could not record: " + error.Message); }
+    }
+
+    void BeginCapture(bool includeMicrophone)
+    {
+        folder = Path.Combine(Paths.Local, "recording-" + Guid.NewGuid()); Directory.CreateDirectory(folder);
+        system = new WasapiRecorderBuilder().WithLoopbackCapture().Build();
+        system.DataAvailable += (buffer, flags, devicePosition, qpcPosition) =>
+        {
+            lock (audioLock)
+            {
+                if ((flags & NAudio.CoreAudioApi.AudioClientBufferFlags.Silent) != 0) systemWriter?.Write(new byte[buffer.Length]);
+                else systemWriter?.Write(buffer);
+            }
+        };
+        // The recorder determines its actual format when capture starts.
+        system.StartRecording();
+        lock (audioLock) systemWriter = new WaveFileWriter(Path.Combine(folder, "system.wav"), system.WaveFormat);
+        if (includeMicrophone)
+        {
+            mic = new WaveIn { WaveFormat = new WaveFormat(16000, 16, 1), BufferMilliseconds = 100 };
+            micWriter = new WaveFileWriter(Path.Combine(folder, "microphone.wav"), mic.WaveFormat);
+            mic.DataAvailable += (_, e) => { lock (audioLock) micWriter?.Write(e.Buffer, 0, e.BytesRecorded); };
+            mic.StartRecording();
+        }
+    }
+
+    internal static async Task<object> CaptureTest(string fixture)
+    {
+        // Open the input device to verify the driver, discard every microphone sample.
+        using (var probe = new WaveIn { WaveFormat = new WaveFormat(16000, 16, 1) })
+        {
+            probe.StartRecording(); await Task.Delay(300); probe.StopRecording();
+        }
+        var capture = new MeetingNotes();
+        try
+        {
+            capture.BeginCapture(false); await Task.Delay(400);
+            using var reader = new AudioFileReader(fixture);
+            using var output = new WaveOut(); output.Init(reader); output.Play();
+            var deadline = DateTime.UtcNow + reader.TotalTime + TimeSpan.FromSeconds(5);
+            while (output.PlaybackState == PlaybackState.Playing && DateTime.UtcNow < deadline) await Task.Delay(100);
+            output.Stop();
+            await Task.Delay(600); capture.DisposeCapture();
+            var recorded = Path.Combine(capture.folder, "system.wav");
+            using var check = new AudioFileReader(recorded);
+            if (check.Length == 0) throw new InvalidOperationException("Loopback captured no audio.");
+            var parts = await TranscribeAudio(recorded, "Loopback test", null, CancellationToken.None);
+            if (parts.Count == 0) throw new InvalidOperationException("No recognisable test speech was captured.");
+            return new { microphoneDeviceOpened = true, microphoneAudioSaved = false, loopbackSeconds = check.TotalTime.TotalSeconds, transcript = string.Join(" ", parts) };
+        }
+        finally { capture.DisposeCapture(); capture.DeleteCapture(); }
     }
 
     void DisposeCapture()
@@ -91,8 +135,7 @@ sealed class MeetingNotes
         var parts = new List<string>();
         using var reader = new AudioFileReader(path);
         ISampleProvider source = reader;
-        if (source.WaveFormat.Channels == 2) source = new StereoToMonoSampleProvider(source);
-        if (source.WaveFormat.Channels != 1) throw new InvalidOperationException("Choose mono or stereo audio.");
+        if (source.WaveFormat.Channels > 1) source = new MonoSource(source);
         if (source.WaveFormat.SampleRate != 16000) source = new WdlResamplingSampleProvider(source, 16000);
         var buffer = new float[16000 * 30]; int got, offset = 0;
         while ((got = Fill(source, buffer)) > 0)
@@ -105,6 +148,33 @@ sealed class MeetingNotes
         }
         return parts;
     }, token);
+
+    sealed class MonoSource : ISampleProvider
+    {
+        readonly ISampleProvider source;
+        readonly float[] input;
+        readonly int channels;
+        public WaveFormat WaveFormat { get; }
+        public MonoSource(ISampleProvider source)
+        {
+            this.source = source; channels = source.WaveFormat.Channels;
+            if (channels < 1 || channels > 32) throw new InvalidOperationException("Unsupported audio channel count.");
+            input = new float[4096 * channels];
+            WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(source.WaveFormat.SampleRate, 1);
+        }
+        public int Read(Span<float> output)
+        {
+            int frames = Math.Min(output.Length, input.Length / channels);
+            int got = source.Read(input.AsSpan(0, frames * channels)) / channels;
+            for (int frame = 0; frame < got; frame++)
+            {
+                float sum = 0;
+                for (int channel = 0; channel < channels; channel++) sum += input[frame * channels + channel];
+                output[frame] = sum / channels;
+            }
+            return got;
+        }
+    }
 
     static int Fill(ISampleProvider source, float[] buffer)
     {

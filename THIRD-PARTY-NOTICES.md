@@ -41,3 +41,6 @@ SOFTWARE.
 This source repository references packages including Whisper.net/whisper.cpp, NAudio, System.Speech, Microsoft.Web.WebView2, Pillow, mss, psutil and uiautomation. Codex CLI and the downloaded speech model are separate components. They are not relicensed by this edition. Their package licences and notices govern their use and redistribution.
 
 The build installs dependencies rather than committing their binaries here. In particular, WebView2 has its own Microsoft redistribution licence and notices; do not assume every dependency is MIT. Binary distributors must carry the licences/notices required by their exact dependency versions.
+## Optional local connector runtimes
+
+Atticus can invoke separately installed Playwright MCP (`@playwright/mcp`, Apache-2.0) and `mcp-remote` (MIT) runtimes. Their package contents are not vendored in this source repository; retain the notices supplied with each installed package. Existing Blender, IntelliJ and Roblox MCP servers retain their own licences. GitHub CLI, Outlook and OneDrive are independent applications/services with their own terms and account permissions.

@@ -10,6 +10,8 @@ Speech is transcribed locally with Whisper. Questions and approved actions use t
 
 Open the **Control centre** from the tray menu or the buttons in the assistant.
 
+When a local setup proposal is available, **Review setup** shows its exact folders, saved command arrays and MCP definitions before any permissions are applied. Approval validates the proposal digest, validates every entry, backs up existing state and applies it together. The model cannot approve its own setup. Sign-ins remain separate from saving a connector definition.
+
 | Feature | Example or setup |
 | --- | --- |
 | Typing and voice | Type a question immediately, or click the microphone. Its state is labelled explicitly. |
@@ -54,6 +56,12 @@ Project file access is limited to selected folders and UTF-8 text. Traversal, es
 
 MCP supports local stdio servers (`command`, `args`, optional `env_vars`) and Streamable HTTP (`url`, optional `bearer_token_env_var`). It does not import Codex's configured servers. Credentials are referenced by environment variable name, not pasted into the server JSON. OAuth sign-in and interactive server requests are not implemented; authenticate/configure the server separately. Third-party services retain their own permissions, charges and limits.
 
+Optional `server_options` supports only local Blender host/port, IntelliJ MCP port and telemetry preferences; credentials must still be environment-variable references. Windows system environment variables are preserved for socket/crypto startup without inheriting unrelated account tokens. Stateful MCP clients remain alive throughout one Codex task, so browser navigation and subsequent inspection share the same session; the owned processes are closed when the task ends.
+
+`personal_mcp.py` provides read-only GitHub tools using the existing GitHub CLI login, Outlook mail/calendar through an existing local classic Outlook profile, and access to a local OneDrive sync folder. It does not send mail, create appointments or publish changes. Outlook data is passed through JSON stdin to a fixed PowerShell adapter. OneDrive support covers locally synced files, not every cloud-only Drive/SharePoint location. These local sessions are separate from Codex's connected cloud apps.
+
+OAuth services can use an explicitly configured external `mcp-remote` stdio proxy. The user completes sign-in in their browser; Atticus does not copy Codex OAuth tokens or submit passwords. Prepared Figma/Render definitions require that sign-in before they are usable. A discovered tool catalogue alone does not prove that a target editor is open or its account authorisation is complete; the control centre displays connection status.
+
 The provider starts an ephemeral session with a temporary isolated Codex home. On NTFS it hard-links the current user's existing `auth.json` for the lifetime of the request, without copying credential contents into the repository or application settings. Temporary request folders are removed on normal exit. Credential-manager-only sign-ins and cross-volume hard links are not supported by this adapter. If Codex rotates authentication inside a request and a later request needs sign-in, run `codex login` again.
 
 Audio remains local. Text, attached screen images and helper results may be sent to Codex. Meeting transcripts are saved locally and sent only when a summary is requested. System/microphone labels identify channels, not individual speakers; this is recorded-note transcription, not live speaker diarisation. Recording audio is deleted after transcription on normal completion; an abrupt process/PC shutdown can leave temporary recording files under `%LOCALAPPDATA%\Atticus\recording-*`. Dollar cost is unavailable and is labelled accordingly. No new OpenAI API key is required for the existing ChatGPT sign-in.
@@ -77,6 +85,8 @@ python atticus.py --selftest
 Use a scratch `ATTICUS_DIR` for tests and diagnostic requests. After building, run the installed `Atticus.exe --selftest`. Transport/tool tests in `tests/test_codex_provider.py` cover invalid helpers, transcript confirmation, declined approvals, argument handling and unknown server requests.
 
 Serve the repository on loopback and open `tests/ui.html` and `tests/hub.html` for browser regressions. The overlay timing tests need a foreground tab because browsers throttle background timers. Close the test tabs/browser afterwards. `tests/test_assistant_services.py` additionally covers Windows lock contention, project preview/backups/conflicts, reminder delivery, workspace verification, real worker completion/cancellation, recovery and MCP stdio/HTTP fixtures. `Atticus.exe --transcribe-file <audio-path>` exercises the same resampling/chunking path used for meeting files without starting recording.
+
+`Atticus.exe --meeting-capture-test <speech-fixture.wav>` plays a local speech fixture, records actual system loopback through the same recorder as meetings, downmixes multichannel output, and transcribes it. It briefly opens the microphone device but discards its samples; no microphone audio is saved. Generated capture files are removed afterwards. Use only when a short audio-output test is appropriate and unrelated media is stopped.
 
 ## Source
 

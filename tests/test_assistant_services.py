@@ -47,7 +47,7 @@ class ServicesTests(unittest.TestCase):
 
     def test_project_paths_exclude_traversal_and_credentials(self):
         project=self.grant()
-        for name in ('../outside.txt','.env.local','.git/config','auth.json','private.pem'):
+        for name in ('../outside.txt','.env.local','prism.env','prism.env.local','.codex-runtime/config.txt','.git/config','auth.json','private.pem'):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 services.project_path(project,name,True)
         (self.project/'note.txt').write_text('hello',encoding='utf-8')

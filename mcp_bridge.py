@@ -8,8 +8,9 @@ import urllib.request
 
 
 class Client:
-    def __init__(self, config):
+    def __init__(self, config, timeout=90):
         self.config = config
+        self.timeout = timeout
         self.serial = 0
         self.session = None
         self.proc = None
@@ -17,7 +18,12 @@ class Client:
 
     def __enter__(self):
         if self.config.get('command'):
-            env = {k:v for k,v in os.environ.items() if k in ('PATH','SystemRoot','TEMP','TMP','USERPROFILE','APPDATA','LOCALAPPDATA') or k in self.config.get('env_vars',[])}
+            # Windows normalises environment keys to upper case. Losing SYSTEMROOT
+            # breaks Winsock/crypto startup in Node, Python and JVM connectors.
+            system_keys={'PATH','SYSTEMROOT','WINDIR','SYSTEMDRIVE','COMSPEC','TEMP','TMP','USERPROFILE','APPDATA','LOCALAPPDATA','PROGRAMFILES','PROGRAMFILES(X86)','PROGRAMDATA','PROCESSOR_ARCHITECTURE','ALLUSERSPROFILE'}
+            requested={k.upper() for k in self.config.get('env_vars',[])}
+            env = {k:v for k,v in os.environ.items() if k.upper() in system_keys | requested}
+            env.update(self.config.get('server_options',{}))
             self.proc = subprocess.Popen([self.config['command'], *self.config.get('args',[])], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                          stderr=subprocess.DEVNULL, text=True, encoding='utf-8', env=env,
                                          creationflags=0x08000000 if os.name=='nt' else 0)
@@ -62,7 +68,7 @@ class Client:
             if not token: raise ValueError('The configured MCP token environment variable is missing.')
             headers['Authorization']='Bearer '+token
         req=urllib.request.Request(self.config['url'],json.dumps(message).encode(),headers)
-        with urllib.request.urlopen(req,timeout=90) as response:
+        with urllib.request.urlopen(req,timeout=self.timeout) as response:
             self.session=response.headers.get('Mcp-Session-Id') or self.session
             if response.status==202: return
             if 'text/event-stream' in response.headers.get('Content-Type',''):
@@ -82,7 +88,7 @@ class Client:
         self.serial+=1; key=self.serial
         self.send({'jsonrpc':'2.0','id':key,'method':method,'params':params})
         while True:
-            try: event=self.messages.get(timeout=90)
+            try: event=self.messages.get(timeout=self.timeout)
             except queue.Empty: raise RuntimeError('MCP server timed out.') from None
             if event is None: raise RuntimeError('MCP server disconnected.')
             if event.get('id')==key and 'method' not in event:
