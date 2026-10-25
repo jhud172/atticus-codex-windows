@@ -1,4 +1,4 @@
-// Atticus for Windows: Alt+Space toggles voice; Alt+Shift+Space opens typing.
+// Atticus for Windows: Alt+Space opens typing; Alt+Shift+Space toggles voice.
 // Build and install: .\build.ps1 (starts at login through the user's Startup shortcut).
 using System.IO.Pipes;
 using System.Text;

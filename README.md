@@ -2,7 +2,7 @@
 
 Independent source-available adaptation of [FindlayHi/atticus-windows](https://github.com/FindlayHi/atticus-windows), originally [SaarthurR/atticus-mac](https://github.com/SaarthurR/atticus-mac).
 
-Atticus is a Windows tray assistant for typing, voice, desktop actions and project work. **Alt+Space** starts/stops voice; **Alt+Shift+Space** opens typing directly. The microphone button also toggles recording. Windows' usual Alt+Space menu is intercepted while Atticus is running. Esc cancels. Shortcuts and hold/toggle behaviour remain configurable in Settings.
+Atticus is a Windows tray assistant for typing, voice, desktop actions and project work. **Alt+Space** opens typing directly; **Alt+Shift+Space** starts/stops voice. The microphone button also toggles recording. Windows' usual Alt+Space menu is intercepted while Atticus is running. Esc cancels. The voice shortcut and hold/toggle behaviour remain configurable in Settings.
 
 Speech is transcribed locally with Whisper. Questions and approved actions use the **Codex CLI app-server**, signed in with your existing Codex account. Account limits apply.
 

@@ -69,7 +69,7 @@ static class Hooks
         int vk = (int)Prefs.Num("hotkeyCode"), mods = (int)Prefs.Num("hotkeyMods");
         if (k.vkCode == 0x20)
         {
-            if (press && Mods() == 5) { if (!typingDown) { typingDown = true; Tap(0xE8); TypeShortcut?.Invoke(); } return 1; }
+            if (press && Mods() == 1) { if (!typingDown) { typingDown = true; Tap(0xE8); TypeShortcut?.Invoke(); } return 1; }
             if (up && typingDown) { typingDown = false; return 1; }
         }
         if (k.vkCode == vk)

@@ -64,7 +64,7 @@ if ($Stage) { exit 0 }
 # Start menu shortcut, so "Atticus" opens Settings from Start
 $sh = New-Object -ComObject WScript.Shell
 $lnk = $sh.CreateShortcut("$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Atticus.lnk")
-$lnk.TargetPath = "$app\Atticus.exe"; $lnk.IconLocation = "$app\ui\AppIcon.ico"; $lnk.Description = 'Press Alt+Space to start or stop voice; Alt+Shift+Space to type'; $lnk.Save()
+$lnk.TargetPath = "$app\Atticus.exe"; $lnk.IconLocation = "$app\ui\AppIcon.ico"; $lnk.Description = 'Press Alt+Space to type; Alt+Shift+Space to start or stop voice'; $lnk.Save()
 
 # Starts at login unless turned off in Settings
 $prefs = Join-Path $env:APPDATA 'Atticus\settings.json'
@@ -83,4 +83,4 @@ Remove-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 
 
 if ($env:ATTICUS_NO_RESTART) { exit 0 }
 Start-Process "$app\Atticus.exe"
-Write-Host 'Atticus is running. Press Alt+Space to start or stop voice; Alt+Shift+Space to type.'
+Write-Host 'Atticus is running. Press Alt+Space to type; Alt+Shift+Space to start or stop voice.'

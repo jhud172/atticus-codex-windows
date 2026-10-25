@@ -34,7 +34,7 @@ static class Prefs
     // Hotkey: virtual-key code + modifiers (1 Alt, 2 Ctrl, 4 Shift, 8 Win, like RegisterHotKey).
     public static readonly Dictionary<string, object> Defaults = new()
     {
-        ["hotkeyCode"] = 0x20, ["hotkeyMods"] = 1, ["hotkeyLabel"] = "Alt+Space", ["login"] = true, ["paused"] = false, ["corner"] = "top-left", ["linger"] = "normal",
+        ["hotkeyCode"] = 0x20, ["hotkeyMods"] = 5, ["hotkeyLabel"] = "Alt+Shift+Space", ["login"] = true, ["paused"] = false, ["corner"] = "top-left", ["linger"] = "normal",
         ["soundStart"] = "Speech On", ["soundDone"] = "Windows Notify System Generic", ["soundStop"] = "Speech Off", ["volume"] = 0.3, ["model"] = "haiku", ["instant"] = true,
         ["ahead"] = true, ["aheadDelay"] = 0.9, ["live"] = true, ["screen"] = "auto", ["openOn"] = "here",
         ["speak"] = false, ["autoCopy"] = false, ["hideWhenSharing"] = true, ["menuIcon"] = true, ["autoUpdate"] = true,
