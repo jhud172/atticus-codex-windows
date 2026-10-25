@@ -1,5 +1,5 @@
-// Atticus for Windows: a tray app. Hold Ctrl+Alt+Space, talk, let go. atticus.py (the brain) does the work through Claude Code.
-// Build and install: .\build.ps1 (starts at login from HKCU\...\Run).
+// Atticus for Windows: Alt+Space toggles voice; Alt+Shift+Space opens typing.
+// Build and install: .\build.ps1 (starts at login through the user's Startup shortcut).
 using System.IO.Pipes;
 using System.Text;
 using NAudio.Wave;
@@ -60,7 +60,11 @@ static class Program
             return;
         }
         using var one = new Mutex(true, @"Local\Atticus", out var first);
-        if (!first) { Send("open"); return; }   // already running: it shows Settings (or setup)
+        if (!first)
+        {
+            if (!args.Contains("--startup")) Send("hub\thistory");
+            return;
+        }
         ApplicationConfiguration.Initialize();
         Application.SetColorMode(SystemColorMode.Dark);
         var ctx = new ApplicationContext();
@@ -68,7 +72,7 @@ static class Program
         void Started(object s, EventArgs e)
         {
             Application.Idle -= Started;
-            _ = Launch();
+            _ = LaunchSafely(args.Contains("--startup"));
         }
         Application.Run(ctx);
         Box?.Hush(); Voice.Shush();
@@ -76,6 +80,26 @@ static class Program
     }
 
     static void Check(bool ok) { if (!ok) { Console.Error.WriteLine("native selftest failed"); Environment.Exit(1); } }
+
+    static async Task LaunchSafely(bool startup)
+    {
+        try
+        {
+            Directory.CreateDirectory(Paths.Config);
+            Err($"{DateTimeOffset.Now:O} Starting Atticus ({(startup ? "login" : "manual")}).");
+            await Launch();
+            Err($"{DateTimeOffset.Now:O} Atticus ready.");
+            if (!startup && Prefs.Bool("onboarded") && File.Exists(Paths.Model)) Hub.Open("history");
+        }
+        catch (Exception error)
+        {
+            Err($"{DateTimeOffset.Now:O} Startup failed: {error}");
+            MessageBox.Show("Atticus could not finish starting. Details were saved to " +
+                Path.Combine(Paths.Config, "app.err") + ".\n\n" + error.Message,
+                "Atticus startup", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            Application.Exit();
+        }
+    }
 
     static async Task Launch()
     {

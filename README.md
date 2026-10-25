@@ -42,6 +42,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 
 Installed app: `%LOCALAPPDATA%\Programs\Atticus`. Python and the speech model: `%LOCALAPPDATA%\Atticus`. Settings/history: `%APPDATA%\Atticus`.
 
+Login startup uses `Atticus.lnk` in the current user's Windows Startup folder, with `--startup` and the installed working folder. The Start at login setting creates/removes this shortcut and removes the legacy Run entry. Login launches stay in the tray; manually opening Atticus opens the control centre. Startup readiness and failures are recorded locally in `%APPDATA%\Atticus\app.err`.
+
 Set `provider` to `codex` in settings. The desktop defaults to Codex; the Python engine retains the upstream Claude adapter for regression compatibility. `codexEffort` is `low`, `medium` or `high`. `codexModel`, if set, explicitly overrides model selection; otherwise the adapter selects the default advertised by `model/list`, avoiding an incompatible global model setting. `ATTICUS_CODEX` can override native CLI discovery.
 
 Codex prepares its connection and tool context while you speak or type. Preparation does not start an AI turn or execute tools. A compact provider-specific prompt avoids unused shell instructions; typed questions capture screens only when they refer to screen content. Remote model load and network latency can still affect response time.

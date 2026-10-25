@@ -81,8 +81,31 @@ sealed class SettingsWindow : PageWindow
 
     public static void Startup(bool on)
     {
+        var shortcutPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Startup), "Atticus.lnk");
+        if (on)
+        {
+            object shell = null, shortcut = null;
+            try
+            {
+                shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell"));
+                shortcut = ((dynamic)shell).CreateShortcut(shortcutPath);
+                dynamic link = shortcut;
+                link.TargetPath = Environment.ProcessPath;
+                link.Arguments = "--startup";
+                link.WorkingDirectory = Paths.App;
+                link.Description = "Start Atticus at Windows sign-in";
+                link.Save();
+            }
+            finally
+            {
+                if (shortcut != null) System.Runtime.InteropServices.Marshal.FinalReleaseComObject(shortcut);
+                if (shell != null) System.Runtime.InteropServices.Marshal.FinalReleaseComObject(shell);
+            }
+        }
+        else if (File.Exists(shortcutPath)) File.Delete(shortcutPath);
+        // Remove the legacy entry only after the replacement was saved successfully.
         using var run = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run");
-        if (on) run.SetValue("Atticus", $"\"{Environment.ProcessPath}\""); else run.DeleteValue("Atticus", false);
+        run.DeleteValue("Atticus", false);
     }
 
     void Record()

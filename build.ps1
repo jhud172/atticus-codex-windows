@@ -70,7 +70,16 @@ $lnk.TargetPath = "$app\Atticus.exe"; $lnk.IconLocation = "$app\ui\AppIcon.ico";
 $prefs = Join-Path $env:APPDATA 'Atticus\settings.json'
 $login = $true
 if (Test-Path $prefs) { try { $p = Get-Content $prefs -Raw | ConvertFrom-Json; if ($p.login -eq $false) { $login = $false } } catch {} }
-if ($login) { Set-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name Atticus -Value "`"$app\Atticus.exe`"" }
+$startupLink = Join-Path ([Environment]::GetFolderPath('Startup')) 'Atticus.lnk'
+if ($login) {
+  $startupShortcut = $sh.CreateShortcut($startupLink)
+  $startupShortcut.TargetPath = "$app\Atticus.exe"
+  $startupShortcut.Arguments = '--startup'
+  $startupShortcut.WorkingDirectory = $app
+  $startupShortcut.Description = 'Start Atticus at Windows sign-in'
+  $startupShortcut.Save()
+} elseif (Test-Path -LiteralPath $startupLink) { Remove-Item -LiteralPath $startupLink }
+Remove-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name Atticus -ErrorAction SilentlyContinue
 
 if ($env:ATTICUS_NO_RESTART) { exit 0 }
 Start-Process "$app\Atticus.exe"
